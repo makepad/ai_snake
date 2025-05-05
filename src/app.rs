@@ -30,12 +30,12 @@ live_design!{
                 let c = cos(a);
                 return mat2(c, -s, s, c);
             }
-
+            
             fn hash(self, p: vec2) -> float {
                  let q = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
                  return fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453);
-             }
-
+            }
+            
             fn noise(self, p: vec2) -> float {
                 let i = floor(p);
                 let f = fract(p);
@@ -61,28 +61,46 @@ live_design!{
                  return v;
             }
 
-            fn galaxy(self, p: vec2) -> vec3 {
-                let t = self.time * 0.05;
-                let pp = p * self.rot(t * 0.5);
-                let f = self.fbm(pp * 2.0);
+            fn swirling_plasma(self, p: vec2) -> vec3 {
+                let t = self.time * 0.1;
+                let scroll_speed = vec2(0.1, 0.05);
+                let p1 = p + scroll_speed * self.time;
+                let p2 = p + vec2(5.2, 1.3) + scroll_speed * self.time * 0.8;
+                let p3 = p + vec2(4.1, 6.3) + scroll_speed * self.time * 1.2;
+                
+                let val = 0.0;
+                val = val + self.fbm(p1 * 1.0 + self.fbm(p1 * 2.0 + t));
+                val = val + self.fbm(p2 * 0.8 + self.fbm(p2 * 1.5 + t * 0.8));
+                val = val + self.fbm(p3 * 1.2 + self.fbm(p3 * 2.5 + t * 1.2));
+                
+                let v = val / 3.0;
 
-                let angle = atan(p.y, p.x) + f * 2.0;
-                let dist = length(p);
-                let spiral = sin(angle * 5.0 - dist * 5.0 + t * 2.0);
-                let stars = pow(max(0.0, self.noise(p * 100.0 + t)), 30.0) * 0.2;
-
-                let col = vec3(0.1, 0.05, 0.2) + spiral * vec3(0.5, 0.2, 0.7) * (0.5 + 0.5 * sin(dist * 10.0));
-                let col = col + stars;
-                return col;
+                let r = 0.5 + 0.5 * cos(v * 2.0 * PI + 0.0 + t * 2.0);
+                let g = 0.5 + 0.5 * sin(v * 2.0 * PI + 1.0 + t * 2.5);
+                let b = 0.5 + 0.5 * sin(v * 2.0 * PI + 2.0 + t * 3.0);
+                
+                return vec3(r, g, b);
             }
             
+            fn stars(self, p: vec2) -> float {
+                let t = self.time * 0.01;
+                let p_high_freq = p * 80.0 + t; 
+                let star_noise = self.noise(p_high_freq);
+                let stars = pow(max(0.0, star_noise - 0.8) / 0.2, 6.0);
+                return stars * 0.5;
+            }
+
             fn pixel(self)->vec4{
-                let uv = self.pos - 0.5;
-                let zoom = 2.0 - self.food_eaten_factor * 0.5;
-                let p = uv * zoom;
+                let uv = self.pos;
+                let parallax_factor = 0.1;
+                let parallax_offset = vec2(self.time * parallax_factor * 0.2, self.time * parallax_factor * 0.1);
+                let p = uv * 3.0 + parallax_offset;
 
-                let col = self.galaxy(p);
+                let plasma_color = self.swirling_plasma(p);
+                let star_intensity = self.stars(uv * 3.0 + parallax_offset * 0.5); // Slower parallax for stars
 
+                let col = plasma_color * 0.8 + star_intensity;
+                
                 let flash_brightness = self.food_eaten_factor * 0.8;
                 let final_color = col + vec3(flash_brightness);
 
@@ -323,8 +341,6 @@ pub struct DrawBlock {
     #[deref] draw_super: DrawQuad,
     #[live] data1: f32,
     #[live] data2: f32,
-    #[live] data3: f32,
-    #[live] data4: f32,
 }
 
 #[derive(Clone, PartialEq)]
@@ -613,7 +629,7 @@ impl Widget for SnakeGame{
                                 let angle_in = dy_in.atan2(dx_in);
                                                                 
                                 if (Self::angle_diff(angle_in, angle_out)).abs() > 0.1 { 
-                                    segment_angle_rad = Self::average_angle(angle_out, angle_in);
+                                    segment_angle_rad = Self::average_angle(angle_out, angle_in); 
                                 } else {
                                     segment_angle_rad = angle_out;
                                 }
